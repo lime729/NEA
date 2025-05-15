@@ -4,6 +4,11 @@ for i in range(24):
     for j in range(24):
         if not ((i == 0 or i == 23) and (j == 0 or j == 23)):
             board.append((i, j))
+def direction(colour):
+    if colour == "r":
+        return 1
+    else:
+        return 0
 class Peg:
     def __init__(self, position):
         self.position = position
@@ -29,103 +34,80 @@ class Gamestate:
         self.redlinks = []
         self.bluelinks = []
         self.turn = "r"
+    def player_data(self, colour):
+        if colour == "r":
+            return (self.redpegs, self.redlinks, self.bluepegs, self.bluelinks, "b")
+        else:
+            return (self.bluepegs, self.bluelinks, self.redpegs, self.redlinks, "r")
     def play(self, move):
         newstate = copy.deepcopy(self)
         newstate.emptyholes.remove(move)
         newpeg = Peg(move)
-        if newstate.turn == "r":
-            for redpeg in newstate.redpegs:
-                if knight_check(redpeg, newpeg):
-                    newlink = Link((redpeg, newpeg))
-                    check = True
-                    for bluelink in newstate.bluelinks:
-                        if intersect_check(newlink, bluelink):
-                            check = False
-                    if check:
-                        newstate.redlinks.append(newlink)
-                        redpeg.links.append(newlink)
-                        newpeg.links.append(newlink)
-            newstate.redpegs.append(newpeg)
-            newstate.turn = "b"
-        else:
-            for bluepeg in newstate.bluepegs:
-                if knight_check(bluepeg, newpeg):
-                    newlink = Link((bluepeg, newpeg))
-                    check = True
-                    for redlink in newstate.redlinks:
-                        if intersect_check(newlink, redlink):
-                            check = False
-                    if check:
-                        newstate.bluelinks.append(newlink)
-                        bluepeg.links.append(newlink)
-                        newpeg.links.append(newlink)
-            newstate.bluepegs.append(newpeg)
-            newstate.turn = "r"
+        data = newstate.player_data(newstate.turn)
+        ownpegs = data[0]
+        ownlinks = data[1]
+        opponentlinks = data[3]
+        opponentcolour = data[4]
+        for ownpeg in ownpegs:
+            if knight_check(ownpeg, newpeg):
+                newlink = Link((ownpeg, newpeg))
+                check = True
+                for opponentlink in opponentlinks:
+                    if intersect_check(newlink, opponentlink):
+                        check = False
+                if check:
+                    ownlinks.append(newlink)
+                    ownpeg.links.append(newlink)
+                    newpeg.links.append(newlink)
+        ownpegs.append(newpeg)
+        newstate.turn = opponentcolour
         return newstate
-    def red_components(self):
-        red = []
-        for peg in self.redpegs:
-            red.append([peg])
-        for link in self.redlinks:
+    def components(self, colour):
+        data = self.player_data(colour)
+        components = []
+        ownpegs = data[0]
+        ownlinks = data[1]
+        for peg in ownpegs:
+            components.append([peg])
+        for link in ownlinks:
             peg1 = link.pegs[0]
             peg2 = link.pegs[1]
-            for component in red:
+            for component in components:
                 if peg1 in component:
                     component1 = component
                 if peg2 in component:
                     component2 = component
             if component1 != component2:
-                red.remove(component1)
-                red.remove(component2)
-                red.append(component1 + component2)
-        return red
-    def red_win_check(self):
-        for component in self.red_components():
-            topcheck = False
-            bottomcheck = False
+                components.remove(component1)
+                components.remove(component2)
+                components.append(component1 + component2)
+        return components
+    def win_check(self, colour):
+        for component in self.components(colour):
+            startcheck = False
+            endcheck = False
             for peg in component:
-                if peg.position[1] == 23:
-                    topcheck = True
-                if peg.position[1] == 0:
-                    bottomcheck = True
-                if topcheck and bottomcheck:
+                if peg.position[direction(colour)] == 0:
+                    startcheck = True
+                if peg.position[direction(colour)] == 23:
+                    endcheck = True
+                if startcheck and endcheck:
                     return True
         return False
-    def blue_components(self):
-        blue = []
-        for peg in self.bluepegs:
-            blue.append([peg])
-        for link in self.bluelinks:
-            peg1 = link.pegs[0]
-            peg2 = link.pegs[1]
-            for component in blue:
-                if peg1 in component:
-                    component1 = component
-                if peg2 in component:
-                    component2 = component
-            if component1 != component2:
-                blue.remove(component1)
-                blue.remove(component2)
-                blue.append(component1 + component2)
-        return blue
-    def blue_win_check(self):
-        for component in self.blue_components():
-            leftcheck = False
-            rightcheck = False
-            for peg in component:
-                if peg.position[0] == 0:
-                    leftcheck = True
-                if peg.position[0] == 23:
-                    rightcheck = True
-                if leftcheck and rightcheck:
-                    return True
-        return False
-    def redscore(self, mode):
-        if self.red_win_check():
+    def score(self, colour, mode):
+        data = self.player_data(colour)
+        ownpegs = data[0]
+        ownlinks = data[1]
+        opponentpegs = data[2]
+        opponentlinks = data[3]
+        opponentcolour = data[4]
+        if self.win_check(colour):
             return 1000000
-        if self.blue_win_check():
+        if self.win_check(opponentcolour):
             return -1000000
         score = 0
-        score = score + len(self.redlinks)
-        score = score - len(self.bluelinks)
+        for link in ownlinks:
+            score += abs(link.pegs[0].position[direction(colour)] - link.pegs[1].position[direction(colour)])
+        for link in opponentlinks:
+            score -= abs(link.pegs[0].position[direction(opponentcolour)] - link.pegs[1].position[direction(opponentcolour)])
         
