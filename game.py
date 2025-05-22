@@ -34,6 +34,7 @@ class Gamestate:
         self.redlinks = []
         self.bluelinks = []
         self.turn = "r"
+        self.lastpeg = None
     def player_data(self, colour):
         if colour == "r":
             return (self.redpegs, self.redlinks, self.bluepegs, self.bluelinks, "b")
@@ -61,6 +62,7 @@ class Gamestate:
                     newpeg.links.append(newlink)
         ownpegs.append(newpeg)
         newstate.turn = opponentcolour
+        newstate.lastpeg = newpeg
         return newstate
     def components(self, colour):
         data = self.player_data(colour)
