@@ -41,11 +41,12 @@ class Gamestate:
             return (self.redpegs, self.redlinks, self.bluepegs, self.bluelinks, "b")
         else:
             return (self.bluepegs, self.bluelinks, self.redpegs, self.redlinks, "r")
+    def valid(self, move):
+        return not (self.turn == "r" and (move[0] == 0 or move[0] == 23)) and not (self.turn == "b" and (move[1] == 0 or move[1] == 23))
     def play(self, move):
-        newstate = copy.deepcopy(self)
-        newstate.emptyholes.remove(move)
+        self.emptyholes.remove(move)
         newpeg = Peg(move)
-        data = newstate.player_data(newstate.turn)
+        data = self.player_data(self.turn)
         ownpegs = data[0]
         ownlinks = data[1]
         opponentlinks = data[3]
@@ -62,9 +63,25 @@ class Gamestate:
                     ownpeg.links.append(newlink)
                     newpeg.links.append(newlink)
         ownpegs.append(newpeg)
-        newstate.turn = opponentcolour
-        newstate.lastpeg = newpeg
-        return newstate
+        self.turn = opponentcolour
+        self.lastpeg = newpeg
+    def undo(self, move):
+        self.emptyholes.append(move)
+        data = self.player_data(self.turn)
+        ownpegs = data[2]
+        ownlinks = data[3]
+        owncolour = data[4]
+        for ownpeg in ownpegs:
+            if ownpeg.position == move:
+                ownpegs.remove(ownpeg)
+                for link in ownpeg.links:
+                    ownlinks.remove(link)
+                    if link.pegs[0] == ownpeg:
+                        link.pegs[1].links.remove(link)
+                    else:
+                        link.pegs[0].links.remove(link)
+                break
+        self.turn = owncolour
     def components(self, colour):
         data = self.player_data(colour)
         components = []
@@ -117,17 +134,70 @@ class Gamestate:
         opponentlinks = data[3]
         opponentcolour = data[4]
         if self.win_check(colour):
-            return 1000000
+            return float("inf")
         if self.win_check(opponentcolour):
-            return -1000000
+            return float("-inf")
         score = 0
         for link in ownlinks:
             score += abs(link.pegs[0].position[direction(colour)] - link.pegs[1].position[direction(colour)])
         for link in opponentlinks:
             score -= abs(link.pegs[0].position[direction(opponentcolour)] - link.pegs[1].position[direction(opponentcolour)])
+        for component in self.components(colour):
+            max = 0
+            min = 23
+            for peg in component:
+                if peg.position[direction(colour)] > max:
+                    max = peg.position[direction(colour)]
+                if peg.position[direction(colour)] < min:
+                    min = peg.position[direction(colour)]
+            score += 100*(max - min)
+        for component in self.components(opponentcolour):
+            max = 0
+            min = 23
+            for peg in component:
+                if peg.position[direction(opponentcolour)] > max:
+                    max = peg.position[direction(colour)]
+                if peg.position[direction(opponentcolour)] < min:
+                    min = peg.position[direction(colour)]
+            score -= 100*(max - min)
         return score
     def move(self, mode):
-        return random.choice(self.emptyholes)
+        def minimax(state, depth, alpha, beta, maximizing, colour, mode):
+            if depth == 0 or state.win_check("r") or state.win_check("b"):
+                return (state.score(colour, mode), None)
+            best_move = None
+            if maximizing:
+                max_score = float("-inf")
+                for move in state.emptyholes:
+                    if state.valid(move):
+                        state.play(move)
+                        score = minimax(state, depth - 1, alpha, beta, False, colour, mode)[0]
+                        state.undo(move)
+                        if score > max_score:
+                            max_score = score
+                            best_move = move
+                        if score > alpha:
+                            alpha = score
+                        if alpha >= beta:
+                            break
+                return (max_score, best_move)
+            else:
+                min_score = float("inf")
+                for move in state.emptyholes:
+                    if state.valid(move):
+                        state.play(move)
+                        score = minimax(state, depth - 1, alpha, beta, True, colour, mode)[0]
+                        state.undo(move)
+                        if score < min_score:
+                            min_score = score
+                            best_move = move
+                        if score < beta:
+                            beta = score
+                        if alpha >= beta:
+                            break
+                return (min_score, best_move)
+        depth = 3
+        return minimax(self, depth, float("-inf"), float("inf"), True, self.turn, mode)[1]
 import tkinter as tk
 root = tk.Tk()
 root.title("Twixt")
@@ -224,7 +294,7 @@ def draw_board(gamestate, canvas, turn_label, user_colour):
             else:
                 turn_label.config(text = "CPU's Turn", fg = "darkred")
 def new_game_popup():
-    popup = tk.Toplevel(root)
+    popup = tk.Toplevel(root, bg = "white")
     popup.title("New Game Options")
     popup.geometry("300x300")
     popup.transient(root)
@@ -283,7 +353,6 @@ def new_game_popup():
     tk.Radiobutton(popup, text = "Random", variable = player, value = "Random").pack()
     tk.Button(popup, text = "Start", command = start_game).pack(pady = 10)
 restart_button.config(text = "New Game", command = new_game_popup)
-restart_button.config(command = new_game_popup)
 def click_board(event):
     global state
     if not state.win_check("r") and not state.win_check("b"):
@@ -299,8 +368,8 @@ def click_board(event):
             else:
                 j = 100
             if (i, j) in state.emptyholes:
-                if not (user_colour == "r" and (i == 0 or i == 23)) and not (user_colour == "b" and (j == 0 or j == 23)):
-                    state = state.play((i, j))
+                if state.valid((i, j)):
+                    state.play((i, j))
                     draw_board(state, canvas, turn_label, user_colour)
 canvas.bind("<Button-1>", click_board)
 def CPU_move():
@@ -308,7 +377,7 @@ def CPU_move():
     global difficulty
     if not state.win_check("r") and not state.win_check("b"):
         if state.turn != user_colour:
-            state = state.play(state.move(difficulty))
+            state.play(state.move(difficulty))
             draw_board(state, canvas, turn_label, user_colour)
         root.after(1000, CPU_move)
 def rules_popup():
@@ -319,9 +388,9 @@ def rules_popup():
     root_x = root.winfo_x()
     root_y = root.winfo_y()
     popup.geometry(f"+{root_x+620}+{root_y+20}")
-    frame = tk.Frame(popup, bg = "white")
+    frame = tk.Frame(popup, bg = "black")
     frame.pack(expand = True, fill = "both")
-    text = tk.Text(frame, wrap = "word", bg = "white", fg = "black", font = ("Arial", 11))
+    text = tk.Text(frame, wrap = "word", bg = "#ffff80", fg = "black", font = ("Arial", 11))
     text.pack(expand = True, fill = "both", padx = 5, pady = 5)
     rules_text = """Twixt Rules:
 1. The board is a 24x24 grid with the four corners removed.
