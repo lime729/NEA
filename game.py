@@ -1,49 +1,73 @@
-import copy
+BOARD_SIZE = 6
+
 import random
+
+# Set up board
 board = []
-for i in range(24):
-    for j in range(24):
-        if not ((i == 0 or i == 23) and (j == 0 or j == 23)):
+for i in range(BOARD_SIZE):
+    for j in range(BOARD_SIZE):
+        if not ((i == 0 or i == BOARD_SIZE - 1) and (j == 0 or j == BOARD_SIZE - 1)):
             board.append((i, j))
+
+# Assign a direction to each colour
 def direction(colour):
     if colour == "r":
         return 1
     else:
         return 0
+
+# Class for pegs of the grid
 class Peg:
     def __init__(self, position):
-        self.position = position
-        self.links = []
+        self.position = position # tuple containing coordinates of the peg
+        self.links = [] # list of links it is connected to
+
+# Check if two pegs can form a link
 def knight_check(peg1, peg2):
     return ({abs(peg1.position[0] - peg2.position[0]), abs(peg1.position[1] - peg2.position[1])} == {1, 2})
+
+# Class for links of the grid
 class Link:
     def __init__(self, pegs):
-        self.pegs = pegs
+        self.pegs = pegs # tuple containing the two pegs which the link connects
+
+# Check if two links intersect
 def intersect_check(link1, link2):
+
+    # Check the orientation of three pegs
     def anticlockwise_check(peg1, peg2, peg3):
         return peg1.position[0]*peg2.position[1] + peg2.position[0]*peg3.position[1] + peg3.position[0]*peg1.position[1] - peg1.position[1]*peg2.position[0] - peg2.position[1]*peg3.position[0] - peg3.position[1]*peg1.position[0] > 0
+    
     link1peg1 = link1.pegs[0]
     link1peg2 = link1.pegs[1]
     link2peg1 = link2.pegs[0]
     link2peg2 = link2.pegs[1]
     return (anticlockwise_check(link1peg1, link1peg2, link2peg1) != anticlockwise_check(link1peg1, link1peg2, link2peg2)) and (anticlockwise_check(link2peg1, link2peg2, link1peg1) != anticlockwise_check(link2peg1, link2peg2, link1peg2))
+
+# Class for a state of the entire grid
 class Gamestate:
     def __init__(self):
-        self.emptyholes = board[:]
-        self.redpegs = []
-        self.bluepegs = []
-        self.redlinks = []
-        self.bluelinks = []
-        self.turn = "r"
-        self.lastpeg = None
+        self.emptyholes = board[:] # List of empty holes of the grid
+        self.redpegs = [] # List of red pegs
+        self.bluepegs = [] # List of blue pegs
+        self.redlinks = [] # List of red links
+        self.bluelinks = [] # List of blue links
+        self.turn = "r" # Indicate which player's turn it is
+        self.lastpeg = None # The last peg placed down
+    
+    # Return data of a player and opponent
     def player_data(self, colour):
         if colour == "r":
             return (self.redpegs, self.redlinks, self.bluepegs, self.bluelinks, "b")
         else:
             return (self.bluepegs, self.bluelinks, self.redpegs, self.redlinks, "r")
+    
+    # Check if a move is valid
     def valid(self, move):
-        return not (self.turn == "r" and (move[0] == 0 or move[0] == 23)) and not (self.turn == "b" and (move[1] == 0 or move[1] == 23))
-    def play(self, move):
+        return not (self.turn == "r" and (move[0] == 0 or move[0] == BOARD_SIZE - 1)) and not (self.turn == "b" and (move[1] == 0 or move[1] == BOARD_SIZE - 1))
+    
+    # Implement a move on the grid
+    def play(self, move): # move is a tuple indicating coordinates of the peg placed
         self.emptyholes.remove(move)
         newpeg = Peg(move)
         data = self.player_data(self.turn)
@@ -65,7 +89,9 @@ class Gamestate:
         ownpegs.append(newpeg)
         self.turn = opponentcolour
         self.lastpeg = newpeg
-    def undo(self, move):
+    
+    # Undo the latest move
+    def undo(self, move): # move is a tuple indicating coordinates of the peg removed
         self.emptyholes.append(move)
         data = self.player_data(self.turn)
         ownpegs = data[2]
@@ -82,6 +108,8 @@ class Gamestate:
                         link.pegs[0].links.remove(link)
                 break
         self.turn = owncolour
+    
+    # Divide all the pegs of a colour into components connected by links
     def components(self, colour):
         data = self.player_data(colour)
         components = []
@@ -102,6 +130,8 @@ class Gamestate:
                 components.remove(component2)
                 components.append(component1 + component2)
         return components
+    
+    # Check if a player has won
     def win_check(self, colour):
         for component in self.components(colour):
             startcheck = False
@@ -109,11 +139,13 @@ class Gamestate:
             for peg in component:
                 if peg.position[direction(colour)] == 0:
                     startcheck = True
-                if peg.position[direction(colour)] == 23:
+                if peg.position[direction(colour)] == BOARD_SIZE - 1:
                     endcheck = True
                 if startcheck and endcheck:
                     return True
         return False
+    
+    # Return the path connecting the goal lines if a player has won
     def win_path(self, colour):
         for component in self.components(colour):
             startcheck = False
@@ -121,11 +153,13 @@ class Gamestate:
             for peg in component:
                 if peg.position[direction(colour)] == 0:
                     startcheck = True
-                if peg.position[direction(colour)] == 23:
+                if peg.position[direction(colour)] == BOARD_SIZE - 1:
                     endcheck = True
                 if startcheck and endcheck:
                     return component
         return []
+    
+    # Evaluate a state
     def score(self, colour, mode):
         data = self.player_data(colour)
         ownpegs = data[0]
@@ -143,24 +177,38 @@ class Gamestate:
         for link in opponentlinks:
             score -= abs(link.pegs[0].position[direction(opponentcolour)] - link.pegs[1].position[direction(opponentcolour)])
         for component in self.components(colour):
-            max = 0
-            min = 23
+            vmax = 0
+            vmin = BOARD_SIZE - 1
+            hmax = 0
+            hmin = BOARD_SIZE - 1
             for peg in component:
-                if peg.position[direction(colour)] > max:
-                    max = peg.position[direction(colour)]
-                if peg.position[direction(colour)] < min:
-                    min = peg.position[direction(colour)]
-            score += 100*(max - min)
+                if peg.position[direction(colour)] > vmax:
+                    vmax = peg.position[direction(colour)]
+                if peg.position[direction(colour)] < vmin:
+                    vmin = peg.position[direction(colour)]
+                if peg.position[direction(opponentcolour)] > vmax:
+                    hmax = peg.position[direction(opponentcolour)]
+                if peg.position[direction(opponentcolour)] < vmin:
+                    hmin = peg.position[direction(opponentcolour)]
+            score += 100*(vmax - vmin) + 10*(hmax - hmin)
         for component in self.components(opponentcolour):
-            max = 0
-            min = 23
+            vmax = 0
+            vmin = BOARD_SIZE - 1
+            hmax = 0
+            hmin = BOARD_SIZE - 1
             for peg in component:
-                if peg.position[direction(opponentcolour)] > max:
-                    max = peg.position[direction(colour)]
-                if peg.position[direction(opponentcolour)] < min:
-                    min = peg.position[direction(colour)]
-            score -= 100*(max - min)
+                if peg.position[direction(opponentcolour)] > vmax:
+                    vmax = peg.position[direction(opponentcolour)]
+                if peg.position[direction(opponentcolour)] < vmin:
+                    vmin = peg.position[direction(opponentcolour)]
+                if peg.position[direction(colour)] > hmax:
+                    hmax = peg.position[direction(colour)]
+                if peg.position[direction(colour)] < hmin:
+                    hmin = peg.position[direction(colour)]
+            score -= 100*(vmax - vmin) + 10*(hmax - hmin)
         return score
+    
+    # Return the move CPU makes given a state
     def move(self, mode):
         def minimax(state, depth, alpha, beta, maximizing, colour, mode):
             if depth == 0 or state.win_check("r") or state.win_check("b"):
@@ -170,9 +218,11 @@ class Gamestate:
                 max_score = float("-inf")
                 for move in state.emptyholes:
                     if state.valid(move):
+                        lastpeg = state.lastpeg
                         state.play(move)
                         score = minimax(state, depth - 1, alpha, beta, False, colour, mode)[0]
                         state.undo(move)
+                        state.lastpeg = lastpeg
                         if score > max_score:
                             max_score = score
                             best_move = move
@@ -185,9 +235,11 @@ class Gamestate:
                 min_score = float("inf")
                 for move in state.emptyholes:
                     if state.valid(move):
+                        lastpeg = state.lastpeg
                         state.play(move)
                         score = minimax(state, depth - 1, alpha, beta, True, colour, mode)[0]
                         state.undo(move)
+                        state.lastpeg = lastpeg
                         if score < min_score:
                             min_score = score
                             best_move = move
@@ -196,9 +248,13 @@ class Gamestate:
                         if alpha >= beta:
                             break
                 return (min_score, best_move)
-        depth = 3
+        depth = 5
         return minimax(self, depth, float("-inf"), float("inf"), True, self.turn, mode)[1]
+
+
+# Implement GUI
 import tkinter as tk
+
 root = tk.Tk()
 root.title("Twixt")
 root.geometry("900x600")
@@ -218,60 +274,72 @@ rules_button = tk.Button(control_frame, text = "Rules", bg = "yellow", width = 1
 rules_button.pack(pady = 20)
 quit_button = tk.Button(control_frame, text = "Quit", bg = "red", fg = "white", width = 10, height = 2, command = root.quit)
 quit_button.pack(pady = 20)
+
+MARGIN = 70
+SPACING = (600 - 2*MARGIN)/(BOARD_SIZE - 1)
+TOP_LINE = MARGIN + SPACING/2
+BOTTOM_LINE = 600 - TOP_LINE
+WIDTH = 2
+WIDER = 4
+WIDEST = 5
+
+# Draw the grid
 def draw_board(gamestate, canvas, turn_label, user_colour):
     redwinpath = gamestate.win_path("r")
     bluewinpath = gamestate.win_path("b")
     canvas.delete("all")
-    canvas.create_line(80, 80, 520, 80, fill = "red", width = 2)
-    canvas.create_line(80, 520, 520, 520, fill = "red", width = 2)
-    canvas.create_line(80, 80, 80, 520, fill = "blue", width = 2)
-    canvas.create_line(520, 80, 520, 520, fill = "blue", width = 2)
+    canvas.create_line(TOP_LINE, TOP_LINE, BOTTOM_LINE, TOP_LINE, fill = "red", width = WIDTH)
+    canvas.create_line(TOP_LINE, BOTTOM_LINE, BOTTOM_LINE, BOTTOM_LINE, fill = "red", width = WIDTH)
+    canvas.create_line(TOP_LINE, TOP_LINE, TOP_LINE, BOTTOM_LINE, fill = "blue", width = WIDTH)
+    canvas.create_line(BOTTOM_LINE, TOP_LINE, BOTTOM_LINE, BOTTOM_LINE, fill = "blue", width = WIDTH)
     for (i, j) in gamestate.emptyholes:
-        x = 70 + i*20
-        y = 70 + j*20
-        canvas.create_oval(x - 2, y - 2, x + 2, y + 2, fill = "black")
+        x = MARGIN + i*SPACING
+        y = MARGIN + j*SPACING
+        canvas.create_oval(x - WIDTH, y - WIDTH, x + WIDTH, y + WIDTH, fill = "black")
     for peg in gamestate.redpegs + gamestate.bluepegs:
-        x = 70 + peg.position[0]*20
-        y = 70 + peg.position[1]*20
+        x = MARGIN + peg.position[0]*SPACING
+        y = MARGIN + peg.position[1]*SPACING
         if peg in gamestate.redpegs:
             if peg in redwinpath:
-                colour = "firebrick"
+                colour = "firebrick" # Draw winning path in bolder colour
             else:
                 colour = "red"
         else:
             if peg in bluewinpath:
-                colour = "mediumblue"
+                colour = "mediumblue" # Draw winning path in bolder colour
             else:
                 colour = "blue"
         if peg == gamestate.lastpeg:
             outline = "lime"
-            size = 5
+            size = WIDEST
         else:
             outline = ""
-            size = 4
+            size = WIDER
         canvas.create_oval(x - size, y - size, x + size, y + size, fill = colour, outline = outline)
     for link in gamestate.redlinks + gamestate.bluelinks:
         peg1 = link.pegs[0]
         peg2 = link.pegs[1]
-        x1 = 70 + peg1.position[0]*20
-        y1 = 70 + peg1.position[1]*20
-        x2 = 70 + peg2.position[0]*20
-        y2 = 70 + peg2.position[1]*20
+        x1 = MARGIN + peg1.position[0]*SPACING
+        y1 = MARGIN + peg1.position[1]*SPACING
+        x2 = MARGIN + peg2.position[0]*SPACING
+        y2 = MARGIN + peg2.position[1]*SPACING
         if link in gamestate.redlinks:
             if peg1 in redwinpath:
-                colour = "firebrick"
-                width = 5
+                colour = "firebrick" # Draw winning path in bolder colour
+                width = WIDEST
             else:
                 colour = "red"
-                width = 2
+                width = WIDTH
         else:
             if peg1 in bluewinpath:
-                colour = "mediumblue"
-                width = 5
+                colour = "mediumblue" # Draw winning path in bolder colour
+                width = WIDEST
             else:
                 colour = "blue"
-                width = 2
+                width = WIDTH
         canvas.create_line(x1, y1, x2, y2, fill = colour, width = width)
+    
+    # Configurate turn label
     if gamestate.win_check("r"):
         if user_colour == "r":
             turn_label.config(text = "You Won!", fg = "firebrick")
@@ -293,6 +361,8 @@ def draw_board(gamestate, canvas, turn_label, user_colour):
                 turn_label.config(text = "CPU's Turn", fg = "darkblue")
             else:
                 turn_label.config(text = "CPU's Turn", fg = "darkred")
+
+# Configurate popup when pressing New Game/Restart button
 def new_game_popup():
     popup = tk.Toplevel(root, bg = "white")
     popup.title("New Game Options")
@@ -353,25 +423,32 @@ def new_game_popup():
     tk.Radiobutton(popup, text = "Random", variable = player, value = "Random").pack()
     tk.Button(popup, text = "Start", command = start_game).pack(pady = 10)
 restart_button.config(text = "New Game", command = new_game_popup)
+
+# Respond to user clicking on a peg
 def click_board(event):
     global state
+
+    SENSITIVITY = 0.35
+
     if not state.win_check("r") and not state.win_check("b"):
         if state.turn == user_colour:
-            i = (event.x - 70)/20
-            j = (event.y - 70)/20
-            if abs(i - round(i)) < 0.35:
+            i = (event.x - MARGIN)/SPACING
+            j = (event.y - MARGIN)/SPACING
+            if abs(i - round(i)) < SENSITIVITY:
                 i = round(i)
             else:
-                i = 100
-            if abs(j - round(j)) < 0.35:
+                i = BOARD_SIZE
+            if abs(j - round(j)) < SENSITIVITY:
                 j = round(j)
             else:
-                j = 100
+                j = BOARD_SIZE
             if (i, j) in state.emptyholes:
                 if state.valid((i, j)):
                     state.play((i, j))
                     draw_board(state, canvas, turn_label, user_colour)
 canvas.bind("<Button-1>", click_board)
+
+# CPU move
 def CPU_move():
     global state
     global difficulty
@@ -380,6 +457,8 @@ def CPU_move():
             state.play(state.move(difficulty))
             draw_board(state, canvas, turn_label, user_colour)
         root.after(1000, CPU_move)
+
+# Configurate popup when pressing Rules button
 def rules_popup():
     popup = tk.Toplevel(root)
     popup.title("Game Rules")
