@@ -1,4 +1,4 @@
-BOARD_SIZE = 6
+BOARD_SIZE = 24
 
 import random
 
@@ -159,6 +159,27 @@ class Gamestate:
                     return component
         return []
     
+    # Return a list of possible moves for CPU to choose from
+    def possible_moves(self, mode):
+        moves = []
+        data = self.player_data(self.turn)
+        ownpegs = data[0]
+        opponentpegs = data[2]
+        if ownpegs == []:
+            output = [(11, 11), (11, 12), (12, 11), (12, 12)]
+            for peg in opponentpegs:
+                if peg.position in output:
+                    output.remove(peg.position)
+            return output
+        for peg in ownpegs:
+            for distance in [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]:
+                possible_move = (peg.position[0] + distance[0], peg.position[1] + distance[1])
+                if possible_move in self.emptyholes:
+                    if self.valid(possible_move):
+                        if possible_move not in moves:
+                            moves.append(possible_move)
+        return moves
+    
     # Evaluate a state
     def score(self, colour, mode):
         data = self.player_data(colour)
@@ -186,9 +207,9 @@ class Gamestate:
                     vmax = peg.position[direction(colour)]
                 if peg.position[direction(colour)] < vmin:
                     vmin = peg.position[direction(colour)]
-                if peg.position[direction(opponentcolour)] > vmax:
+                if peg.position[direction(opponentcolour)] > hmax:
                     hmax = peg.position[direction(opponentcolour)]
-                if peg.position[direction(opponentcolour)] < vmin:
+                if peg.position[direction(opponentcolour)] < hmin:
                     hmin = peg.position[direction(opponentcolour)]
             score += 100*(vmax - vmin) + 10*(hmax - hmin)
         for component in self.components(opponentcolour):
@@ -206,6 +227,7 @@ class Gamestate:
                 if peg.position[direction(colour)] < hmin:
                     hmin = peg.position[direction(colour)]
             score -= 100*(vmax - vmin) + 10*(hmax - hmin)
+        
         return score
     
     # Return the move CPU makes given a state
@@ -216,39 +238,37 @@ class Gamestate:
             best_move = None
             if maximizing:
                 max_score = float("-inf")
-                for move in state.emptyholes:
-                    if state.valid(move):
-                        lastpeg = state.lastpeg
-                        state.play(move)
-                        score = minimax(state, depth - 1, alpha, beta, False, colour, mode)[0]
-                        state.undo(move)
-                        state.lastpeg = lastpeg
-                        if score > max_score:
-                            max_score = score
-                            best_move = move
-                        if score > alpha:
-                            alpha = score
-                        if alpha >= beta:
-                            break
+                for move in state.possible_moves(mode):
+                    lastpeg = state.lastpeg
+                    state.play(move)
+                    score = minimax(state, depth - 1, alpha, beta, False, colour, mode)[0]
+                    state.undo(move)
+                    state.lastpeg = lastpeg
+                    if score > max_score:
+                        max_score = score
+                        best_move = move
+                    if score > alpha:
+                        alpha = score
+                    if alpha >= beta:
+                        break
                 return (max_score, best_move)
             else:
                 min_score = float("inf")
-                for move in state.emptyholes:
-                    if state.valid(move):
-                        lastpeg = state.lastpeg
-                        state.play(move)
-                        score = minimax(state, depth - 1, alpha, beta, True, colour, mode)[0]
-                        state.undo(move)
-                        state.lastpeg = lastpeg
-                        if score < min_score:
-                            min_score = score
-                            best_move = move
-                        if score < beta:
-                            beta = score
-                        if alpha >= beta:
-                            break
+                for move in state.possible_moves(mode):
+                    lastpeg = state.lastpeg
+                    state.play(move)
+                    score = minimax(state, depth - 1, alpha, beta, True, colour, mode)[0]
+                    state.undo(move)
+                    state.lastpeg = lastpeg
+                    if score < min_score:
+                        min_score = score
+                        best_move = move
+                    if score < beta:
+                        beta = score
+                    if alpha >= beta:
+                        break
                 return (min_score, best_move)
-        depth = 5
+        depth = 2
         return minimax(self, depth, float("-inf"), float("inf"), True, self.turn, mode)[1]
 
 
