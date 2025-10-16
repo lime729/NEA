@@ -1,6 +1,7 @@
 BOARD_SIZE = 24
 
 import random
+import math
 
 # Set up board
 board = []
@@ -73,21 +74,21 @@ class Gamestate:
         data = self.player_data(self.turn)
         ownpegs = data[0]
         ownlinks = data[1]
-        opponentlinks = data[3]
-        opponentcolour = data[4]
+        opplinks = data[3]
+        oppcolour = data[4]
         for ownpeg in ownpegs:
             if knight_check(ownpeg, newpeg):
                 newlink = Link((ownpeg, newpeg))
                 check = True
-                for opponentlink in opponentlinks:
-                    if intersect_check(newlink, opponentlink):
+                for opplink in opplinks:
+                    if intersect_check(newlink, opplink):
                         check = False
                 if check:
                     ownlinks.append(newlink)
                     ownpeg.links.append(newlink)
                     newpeg.links.append(newlink)
         ownpegs.append(newpeg)
-        self.turn = opponentcolour
+        self.turn = oppcolour
         self.lastpeg = newpeg
     
     # Undo the latest move
@@ -164,14 +165,22 @@ class Gamestate:
         moves = []
         data = self.player_data(self.turn)
         ownpegs = data[0]
-        opponentpegs = data[2]
+        opppegs = data[2]
         if ownpegs == []:
-            output = [(11, 11), (11, 12), (12, 11), (12, 12)]
-            for peg in opponentpegs:
-                if peg.position in output:
-                    output.remove(peg.position)
+            if BOARD_SIZE%2 == 0:
+                output = []
+                for position in [(BOARD_SIZE//2 - 1, BOARD_SIZE//2 - 1), (BOARD_SIZE//2 - 1, BOARD_SIZE//2), (BOARD_SIZE//2, BOARD_SIZE//2 - 1), (BOARD_SIZE//2, BOARD_SIZE//2)]:
+                    if position in self.emptyholes:
+                        if self.valid(position):
+                            output.append(position)
+            else:
+                output = []
+                for position in [(BOARD_SIZE//2 - 1, BOARD_SIZE//2), (BOARD_SIZE//2, BOARD_SIZE//2 - 1), (BOARD_SIZE//2, BOARD_SIZE//2), (BOARD_SIZE//2, BOARD_SIZE//2 + 1), (BOARD_SIZE//2 + 1, BOARD_SIZE//2)]:
+                    if position in self.emptyholes:
+                        if self.valid(position):
+                            output.append(position)
             return output
-        for peg in ownpegs:
+        for peg in ownpegs + opppegs:
             for distance in [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]:
                 possible_move = (peg.position[0] + distance[0], peg.position[1] + distance[1])
                 if possible_move in self.emptyholes:
@@ -185,18 +194,18 @@ class Gamestate:
         data = self.player_data(colour)
         ownpegs = data[0]
         ownlinks = data[1]
-        opponentpegs = data[2]
-        opponentlinks = data[3]
-        opponentcolour = data[4]
+        opppegs = data[2]
+        opplinks = data[3]
+        oppcolour = data[4]
         if self.win_check(colour):
             return float("inf")
-        if self.win_check(opponentcolour):
+        if self.win_check(oppcolour):
             return float("-inf")
         score = 0
         for link in ownlinks:
-            score += abs(link.pegs[0].position[direction(colour)] - link.pegs[1].position[direction(colour)])
-        for link in opponentlinks:
-            score -= abs(link.pegs[0].position[direction(opponentcolour)] - link.pegs[1].position[direction(opponentcolour)])
+            score += abs(link.pegs[0].position[direction(colour)] - link.pegs[1].position[direction(colour)]) - 3
+        for link in opplinks:
+            score -= abs(link.pegs[0].position[direction(oppcolour)] - link.pegs[1].position[direction(oppcolour)]) - 3
         for component in self.components(colour):
             vmax = 0
             vmin = BOARD_SIZE - 1
@@ -207,27 +216,61 @@ class Gamestate:
                     vmax = peg.position[direction(colour)]
                 if peg.position[direction(colour)] < vmin:
                     vmin = peg.position[direction(colour)]
-                if peg.position[direction(opponentcolour)] > hmax:
-                    hmax = peg.position[direction(opponentcolour)]
-                if peg.position[direction(opponentcolour)] < hmin:
-                    hmin = peg.position[direction(opponentcolour)]
-            score += 100*(vmax - vmin) + 10*(hmax - hmin)
-        for component in self.components(opponentcolour):
+                if peg.position[direction(oppcolour)] > hmax:
+                    hmax = peg.position[direction(oppcolour)]
+                if peg.position[direction(oppcolour)] < hmin:
+                    hmin = peg.position[direction(oppcolour)]
+            score += 100*(vmax - vmin) + 10*(hmax - hmin) - 3
+        for component in self.components(oppcolour):
             vmax = 0
             vmin = BOARD_SIZE - 1
             hmax = 0
             hmin = BOARD_SIZE - 1
             for peg in component:
-                if peg.position[direction(opponentcolour)] > vmax:
-                    vmax = peg.position[direction(opponentcolour)]
-                if peg.position[direction(opponentcolour)] < vmin:
-                    vmin = peg.position[direction(opponentcolour)]
+                if peg.position[direction(oppcolour)] > vmax:
+                    vmax = peg.position[direction(oppcolour)]
+                if peg.position[direction(oppcolour)] < vmin:
+                    vmin = peg.position[direction(oppcolour)]
                 if peg.position[direction(colour)] > hmax:
                     hmax = peg.position[direction(colour)]
                 if peg.position[direction(colour)] < hmin:
                     hmin = peg.position[direction(colour)]
-            score -= 100*(vmax - vmin) + 10*(hmax - hmin)
-        
+            score -= 100*(vmax - vmin) + 10*(hmax - hmin) - 3
+        def peg_distance(point, peg):
+            return math.sqrt((point[0] - peg.position[0])**2 + (point[1] - peg.position[1])**2)
+        def link_distance(point, link):
+            peg1 = link.pegs[0]
+            peg2 = link.pegs[1]
+            dist1 = peg_distance(point, peg1)
+            dist2 = peg_distance(point, peg2)
+            if dist2**2 >= dist1**2 + 5:
+                return dist1
+            if dist1**2 >= dist2**2 + 5:
+                return dist2
+            return abs(point[0]*peg1.position[1] + peg1.position[0]*peg2.position[1] + peg2.position[0]*point[1] - point[1]*peg1.position[0] - peg1.position[1]*peg2.position[0] - peg2.position[1]*point[0])/math.sqrt(5)
+        for point in board:
+            ownmin = BOARD_SIZE*2
+            for link in ownlinks:
+                dist = link_distance(point, link)
+                if dist < ownmin:
+                    ownmin = dist
+            for peg in ownpegs:
+                dist = peg_distance(point, peg)*2
+                if dist < ownmin:
+                    ownmin = dist
+            oppmin = BOARD_SIZE*2
+            for link in opplinks:
+                dist = link_distance(point, link)
+                if dist < oppmin:
+                    oppmin = dist
+            for peg in opppegs:
+                dist = peg_distance(point, peg)*2
+                if dist < oppmin:
+                    oppmin = dist
+            if 0 < ownmin < oppmin:
+                score += 50/ownmin
+            if ownmin > oppmin > 0:
+                score -= 50/oppmin
         return score
     
     # Return the move CPU makes given a state
@@ -268,7 +311,7 @@ class Gamestate:
                     if alpha >= beta:
                         break
                 return (min_score, best_move)
-        depth = 2
+        depth = 1
         return minimax(self, depth, float("-inf"), float("inf"), True, self.turn, mode)[1]
 
 
